@@ -1,12 +1,16 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"os"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ssm"
 )
@@ -28,12 +32,29 @@ func retrieveEnv() (string, error) {
 	out = strings.TrimSuffix(out, "\n")
 	return out, err
 }
+func getTLSVersion(tr *http.Transport) string {
+	switch tr.TLSClientConfig.MinVersion {
+	case tls.VersionTLS10:
+		return "TLS 1.0"
+	case tls.VersionTLS11:
+		return "TLS 1.1"
+	case tls.VersionTLS12:
+		return "TLS 1.2"
+	case tls.VersionTLS13:
+		return "TLS 1.3"
+	}
+
+	return "Unknown"
+}
 
 // Creates an AWS session
 // Retrieves and decrypts a given parameter
-func retrieveParam(paramName string, getEnvOutput string) (*ssm.GetParameterOutput, error) {
-	ssmPath := getEnvOutput + paramName
-	sess := session.Must(session.NewSession())
+func retrieveParam(paramName string, client http.Client, region string) (*ssm.GetParameterOutput, error) {
+	ssmPath := paramName
+	sess := session.Must(session.NewSession(&aws.Config{
+		Region:     &region,
+		HTTPClient: &client,
+	}))
 	svc := ssm.New(sess)
 	decrypt := true
 	out, err := svc.GetParameter(&ssm.GetParameterInput{
@@ -73,15 +94,23 @@ func main() {
 			log.Fatal(err.Error())
 		} else {
 			fmt.Println(out)
-		}
-	} else {
-		getEnvOutput, err := retrieveEnv()
-		out, err := retrieveParam(paramName, getEnvOutput)
-		if err != nil {
-			log.Println("There was an error fetching/decrypting the parameter:", paramName)
-			log.Fatal(err.Error())
-		} else {
-			fmt.Println(getParamValue(out))
+			return
 		}
 	}
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+	tr.ForceAttemptHTTP2 = true
+	client := http.Client{Transport: tr}
+	region := os.Getenv("AWS_REGION")
+	out, err := retrieveParam(paramName, client, region)
+	if err != nil {
+		log.Println("There was an error fetching/decrypting the parameter:", paramName)
+		log.Fatal(err.Error())
+	} else {
+		fmt.Println(getParamValue(out))
+	}
+
 }

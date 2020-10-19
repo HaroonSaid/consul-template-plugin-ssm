@@ -3,7 +3,7 @@
 set -e
 
 # Get rid of existing binaries
-rm -f dist/ssm*
+rm -rf dist/ssm*
 
 # Check if VERSION variable set and not empty, otherwise set to default value
 if [ -z "$VERSION" ]; then
@@ -15,4 +15,6 @@ echo "Building application version $VERSION"
 OS=linux
 ARCH=amd64
 echo "Building binaries for $OS/$ARCH..."
-GOARCH=$ARCH GOOS=$OS CGO_ENABLED=0 go build -ldflags "-s -w" -ldflags "-X main.version=${VERSION}" -o "dist/ssm" ssm.go
+GOARCH=$ARCH GOOS=$OS CGO_ENABLED=0 go build -ldflags "-s -w" -ldflags "-X main.version=${VERSION}" -o "dist/ssm.exe" ssm.go
+echo "Building binaries for linux/$ARCH..."
+GOARCH=$ARCH GOOS=linux CGO_ENABLED=0 go build -ldflags "-s -w" -ldflags "-X main.version=${VERSION}" -o "dist/ssm" ssm.go
